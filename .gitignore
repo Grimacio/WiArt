@@ -1,0 +1,9 @@
+dist/
+**/__pycache__
+.vscode
+*.csv
+*.txt
+**/*.pyc
+site/
+.DS_Store
+*.egg-info
