@@ -19,6 +19,7 @@ import time
 import random
 import numpy as np
 from threading import Thread
+import os
 
 
 fs=1000     #   Sensor sampling frequency (default is 1000)
@@ -95,7 +96,7 @@ def live_plotter(x_vec,y1_data,y2_data,y3_data,line1, line2, line3,identifier='A
     # return line so we can update it again in the next iteration
     return line1, line2, line3
 
-def Calibrate(sample):
+def calibrate(sample):
     global calibrationSequence, gravityVector, calibrationFlag
     if not detectGravity.is_set():
         for i in range(3):
@@ -108,7 +109,7 @@ def Calibrate(sample):
         return
 
 
-def Kalman(sample, Q, R):
+def kalman(sample, Q, R):
     
     
     correction_cooldown= Event()
@@ -141,7 +142,7 @@ def Kalman(sample, Q, R):
     return xhat
 
 
-def Extract(array, Q, R):
+def extract(array, Q, R, write):
 
     global lastFiltered, storedFiltered, weights, fs, calibrationSequence, threshold, time_window, counter, Pos, dashSize
     scale       =   1/fs
@@ -151,11 +152,11 @@ def Extract(array, Q, R):
     for k in range(len(array[0])):
         counter+=1
         sample  =   [array[0][k]]+[array[1][k]]+[array[2][k]]
-        Calibrate(sample)
+        calibrate(sample)
         for l in range(3):
             sample[l]-=gravityVector[l]
         for i in range(len(filtered)):
-            storedFiltered[i]=np.append(storedFiltered[i][1:],[Kalman(sample, Q, R)[i]])
+            storedFiltered[i]=np.append(storedFiltered[i][1:],[kalman(sample, Q, R)[i]])
             
             filtered[i] +=  [np.dot(storedFiltered[i], weights)]
             if calibrationFlag and counter > time_window and i==0:
@@ -168,7 +169,7 @@ def Extract(array, Q, R):
                         dashSize = integral[i]//threshold
             
                 elif Pos:
-                    print(dashSize)
+                    os.write(write, str.encode(dashSize))
                     dashSize=0
                     Pos= False
                     
@@ -182,6 +183,11 @@ def Extract(array, Q, R):
 
     return filtered
     
+
+
+def move(read, write):
+    dash_size = os.read(read).decode()
+    sys.stdout.write(dash_size)
 
 
 
@@ -275,8 +281,10 @@ def main():
             axis= range(sizeWindow+1)[1:]
 
             run_scheduled_task(5, detectGravity)
-
-            counter=-1
+            pipe_read,pipe_write = os.pipe()
+            mouseMover = Thread(move, (pipe_read, pipe_write))
+            mouseMover.start()
+            n=-1
             while not stop_event.is_set() :
                 rawX=[]
                 rawY=[]
@@ -290,8 +298,8 @@ def main():
                     script.put(frames)
                 #if args.verbose:
                 for frame in frames:
-                    counter+=1
-                    if counter >= len(axis):
+                    n+=1
+                    if n >= len(axis):
                         axis=np.append(axis[1:],[axis[-1]+1])
                     
                     x=frame[5]
@@ -303,7 +311,7 @@ def main():
                     rawZ= np.append(rawZ, [(z-Z_min)/(Z_max-Z_min)*2-1])
                 
                 
-                output  =   Extract([rawX]+[rawY]+[rawZ], 1e-4, 0.9)
+                output  =   extract([rawX]+[rawY]+[rawZ], 1e-4, 0.9, pipe_write)
                 X_plotData  =   np.append(X_plotData[len(output[0]):], output[0])
                 Y_plotData  =   np.append(Y_plotData[len(output[1]):], output[1])
                 Z_plotData  =   np.append(Z_plotData[len(output[2]):], output[2])
