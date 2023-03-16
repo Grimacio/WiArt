@@ -21,23 +21,22 @@ import numpy as np
 from threading import Thread
 
 
-fs=1000
-gravityVector   =   [ 0 , 0 , 0 ]
-lastXhat        =   [ 1000 , 1000 , 1000 ]
+fs=1000     #   Sensor sampling frequency (default is 1000)
+gravityVector   =   [ 0 , 0 , 0 ]       #   Gravitational acceleration vector to be subtracted upon calibration
+lastXhat        =   [ 1000 , 1000 , 1000 ]      #   Continuity values for filtering and calculations
 lastXhatminus   =   [ 0 , 0 , 0 ]
 lastP           =   [ 1000 , 1000 , 1000 ]
 lastPminus      =   [ 0 , 0 , 0 ]
 lastK           =   [ 0 , 0 , 0 ]
 lastFiltered    =   [ 0 , 0 , 0 ]
-lastVelocity    =   [ 0 , 0 , 0 ]
-avDim           =   50
-storedFiltered  =   [np.zeros(avDim)]+[np.zeros(avDim)]+[np.zeros(avDim)]
-weights         =   np.linspace(1,10, num=avDim)
-weights         =   weights/np.linalg.norm(weights)
-threshold       =   70
-time_window     =   100
-counter         =   0
-dashSize        =   0
+avDim           =   50      #   Amount of samples used for averaging
+storedFiltered  =   [np.zeros(avDim)]+[np.zeros(avDim)]+[np.zeros(avDim)]       #   Acceleration (x,y,z) values stored for averaging
+weights         =   np.linspace(1,10, num=avDim)    #   Averaging weights for each element stored
+weights         =   weights/np.linalg.norm(weights)     #   Normalize to avoid scaling
+threshold       =   70      #   Instantaneous velocity threshold for stroke dash detection
+time_window     =   100     #   Amount of samples used to derive intantaneous velocity
+counter         =   0       #   Sample counter
+dashSize        =   0       #   Relative size of each stroke
 Pos             =   False
 
 
@@ -144,11 +143,10 @@ def Kalman(sample, Q, R):
 
 def Extract(array, Q, R):
 
-    global lastFiltered,lastVelocity, storedFiltered, weights, fs, calibrationSequence, threshold, time_window, counter, Pos, dashSize
+    global lastFiltered, storedFiltered, weights, fs, calibrationSequence, threshold, time_window, counter, Pos, dashSize
     scale       =   1/fs
     filtered    =   [ [] , [] , [] ]
     integral    =   [ 0 , 0 , 0 ]
-    velocity    =   [ [] , [] , [] ]
 
     for k in range(len(array[0])):
         counter+=1
@@ -161,11 +159,6 @@ def Extract(array, Q, R):
             
             filtered[i] +=  [np.dot(storedFiltered[i], weights)]
             if calibrationFlag and counter > time_window and i==0:
-                """if k==0:
-                    velocity[i] += [lastVelocity[i] + (filtered[i][k])*scale]
-                else:
-                    velocity[i] +=  [velocity[i][-1]+(filtered[i][k])*scale]
-                    """
                 if filtered[i][k]  >   0.5:
                     Pos= True
                     integral[i] = np.sum(filtered[i][-1*time_window:])
@@ -182,13 +175,10 @@ def Extract(array, Q, R):
                     
                     
                     
-            """else:
-                velocity[i] +=  [0]
-                """
+        
     for i in range(3):
         
         lastFiltered[i] = filtered[i][-1]
-        #lastVelocity[i] = velocity[i][-1]
 
     return filtered
     
