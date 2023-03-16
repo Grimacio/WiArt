@@ -1,4 +1,4 @@
-##CORRIGIR PLOT OUTRA VEZ PARA INCLUIR O Z, DESCOMENTAR LA EM BAIXO
+
 #!/usr/bin/python
 
 """
@@ -32,7 +32,7 @@ lastFiltered    =   [ 0 , 0 , 0 ]
 lastVelocity    =   [ 0 , 0 , 0 ]
 avDim           =   50
 storedFiltered  =   [np.zeros(avDim)]+[np.zeros(avDim)]+[np.zeros(avDim)]
-weights         =   np.linspace(1,1, num=avDim)
+weights         =   np.linspace(1,10, num=avDim)
 weights         =   weights/np.linalg.norm(weights)
 threshold       =   70
 time_window     =   100
