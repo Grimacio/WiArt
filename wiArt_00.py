@@ -20,6 +20,7 @@ import random
 import numpy as np
 from threading import Thread
 import os
+import pyautogui
 
 
 fs=1000     #   Sensor sampling frequency (default is 1000)
@@ -189,9 +190,10 @@ def extract(array, Q, R, write):
 
 
 def move(read):
+    generalStroke = 100
     while True:
         dash_size = int(os.read(read, 3).decode("utf-8").replace(" ", ""))
-        print(dash_size)
+        pyautogui.dragRel(generalStroke*dash_size, 0)
 
 
 
@@ -324,6 +326,7 @@ def main():
 
                     
         except KeyboardInterrupt:
+            mouseMover.join()
             if args.duration and timer:
                 timer.cancel()
             pass
