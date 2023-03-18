@@ -169,7 +169,10 @@ def extract(array, Q, R, write):
                         dashSize = integral[i]//threshold
             
                 elif Pos:
-                    os.write(write, str.encode(dashSize))
+                    message =  str(int(dashSize))
+                    while len(message.encode("utf-8")) < 3:
+                        message+= " "
+                    os.write(write, message.encode("utf-8"))
                     dashSize=0
                     Pos= False
                     
@@ -185,9 +188,10 @@ def extract(array, Q, R, write):
     
 
 
-def move(read, write):
-    dash_size = os.read(read).decode()
-    sys.stdout.write(dash_size)
+def move(read):
+    while True:
+        dash_size = int(os.read(read, 3).decode("utf-8").replace(" ", ""))
+        print(dash_size)
 
 
 
@@ -282,7 +286,7 @@ def main():
 
             run_scheduled_task(5, detectGravity)
             pipe_read,pipe_write = os.pipe()
-            mouseMover = Thread(move, (pipe_read, pipe_write))
+            mouseMover = Thread(target=move, args=(pipe_read,))
             mouseMover.start()
             n=-1
             while not stop_event.is_set() :
@@ -315,7 +319,7 @@ def main():
                 X_plotData  =   np.append(X_plotData[len(output[0]):], output[0])
                 Y_plotData  =   np.append(Y_plotData[len(output[1]):], output[1])
                 Z_plotData  =   np.append(Z_plotData[len(output[2]):], output[2])
-                line_x,line_y, line_z=tuple(live_plotter(axis,X_plotData,Y_plotData,Z_plotData,line_x, line_y, line_z))
+                #line_x,line_y, line_z=tuple(live_plotter(axis,X_plotData,Y_plotData,Z_plotData,line_x, line_y, line_z))
                 
 
                     
