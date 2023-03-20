@@ -40,6 +40,8 @@ time_window     =   100     #   Amount of samples used to derive intantaneous ve
 counter         =   0       #   Sample counter
 dashSize        =   0       #   Relative size of each stroke
 Pos             =   False
+Inside          =   False
+crossCount      =   0
 
 
 
@@ -145,8 +147,8 @@ def kalman(sample, Q, R):
 
 def extract(array, Q, R, write):
 
-    global lastFiltered, storedFiltered, weights, fs, calibrationSequence, threshold, time_window, counter, Pos, dashSize
-    scale       =   1/fs
+    global lastFiltered, storedFiltered, weights, fs, calibrationSequence, threshold, time_window, counter, Pos, Inside, crossCount, dashSize
+
     filtered    =   [ [] , [] , [] ]
     integral    =   [ 0 , 0 , 0 ]
 
@@ -154,28 +156,43 @@ def extract(array, Q, R, write):
         counter+=1
         sample  =   [array[0][k]]+[array[1][k]]+[array[2][k]]
         calibrate(sample)
+
         for l in range(3):
             sample[l]-=gravityVector[l]
+
         for i in range(len(filtered)):
+
             storedFiltered[i]=np.append(storedFiltered[i][1:],[kalman(sample, Q, R)[i]])
-            
             filtered[i] +=  [np.dot(storedFiltered[i], weights)]
+
             if calibrationFlag and counter > time_window and i==0:
-                if filtered[i][k]  >   0.5:
-                    Pos= True
-                    integral[i] = np.sum(filtered[i][-1*time_window:])
-                    
-                    if dashSize< integral[i]//threshold:
+
+                if abs(filtered[i][k])  >   0.5:
+                    if Inside:
+                        crossCount+=1
+                    Inside = False
+                    if crossCount==1:
+                        integral[i] = np.sum(filtered[i][-1*time_window:])
                         
-                        dashSize = integral[i]//threshold
-            
-                elif Pos:
-                    message =  str(int(dashSize))
-                    while len(message.encode("utf-8")) < 3:
-                        message+= " "
-                    os.write(write, message.encode("utf-8"))
-                    dashSize=0
-                    Pos= False
+                        if abs(dashSize) < abs(integral[i]//threshold):
+                            
+                            dashSize = integral[i]//threshold
+                
+                else:
+                    if crossCount == 2:
+
+                        message =  str(int(dashSize))
+
+                        while len(message.encode("utf-8")) < 3:
+                            message+= " "
+
+                        os.write(write, message.encode("utf-8"))
+                        dashSize=0
+                        crossCount = 0
+                    
+                    Inside = True
+                
+                
                     
                     
                     
@@ -193,7 +210,8 @@ def move(read):
     generalStroke = 100
     while True:
         dash_size = int(os.read(read, 3).decode("utf-8").replace(" ", ""))
-        pyautogui.dragRel(generalStroke*dash_size, 0)
+        print(dash_size)
+        #pyautogui.dragRel(generalStroke*dash_size, 0)
 
 
 
@@ -321,7 +339,7 @@ def main():
                 X_plotData  =   np.append(X_plotData[len(output[0]):], output[0])
                 Y_plotData  =   np.append(Y_plotData[len(output[1]):], output[1])
                 Z_plotData  =   np.append(Z_plotData[len(output[2]):], output[2])
-                #line_x,line_y, line_z=tuple(live_plotter(axis,X_plotData,Y_plotData,Z_plotData,line_x, line_y, line_z))
+                line_x,line_y, line_z=tuple(live_plotter(axis,X_plotData,Y_plotData,Z_plotData,line_x, line_y, line_z))
                 
 
                     
