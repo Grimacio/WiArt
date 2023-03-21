@@ -210,8 +210,8 @@ def move(read):
     generalStroke = 100
     while True:
         dash_size = int(os.read(read, 3).decode("utf-8").replace(" ", ""))
-        print(dash_size)
-        #pyautogui.dragRel(generalStroke*dash_size, 0)
+        #print(dash_size)
+        pyautogui.dragRel(generalStroke*dash_size, 0)
 
 
 
