@@ -32,7 +32,7 @@ lastPminus      =   [ 0 , 0 , 0 ]
 lastK           =   [ 0 , 0 , 0 ]
 lastFiltered    =   [ 0 , 0 , 0 ]
 avDim           =   50      #   Amount of samples used for averaging
-storedFiltered  =   [np.zeros(avDim)]+[np.zeros(avDim)]+[np.zeros(avDim)]       #   Acceleration (x,y,z) values stored for averaging
+storedFiltered  =   [np.zeros(2000)]+[np.zeros(2000)]+[np.zeros(2000)]       #   Acceleration (x,y,z) values stored for averaging
 weights         =   np.linspace(1,10, num=avDim)    #   Averaging weights for each element stored
 weights         =   weights/np.linalg.norm(weights)     #   Normalize to avoid scaling
 threshold       =   70      #   Instantaneous velocity threshold for stroke dash detection
@@ -147,7 +147,7 @@ def kalman(sample, Q, R):
 
 def extract(array, Q, R, write):
 
-    global lastFiltered, storedFiltered, weights, fs, calibrationSequence, threshold, time_window, counter, Pos, Inside, crossCount, dashSize
+    global lastFiltered, storedFiltered, avDim, weights, fs, calibrationSequence, threshold, time_window, counter, Inside, crossCount, dashSize
 
     filtered    =   [ [] , [] , [] ]
     integral    =   [ 0 , 0 , 0 ]
@@ -162,12 +162,16 @@ def extract(array, Q, R, write):
 
         for i in range(len(filtered)):
 
-            storedFiltered[i]=np.append(storedFiltered[i][1:],[kalman(sample, Q, R)[i]])
-            filtered[i] +=  [np.dot(storedFiltered[i], weights)]
+            storedFiltered[i]   =   np.append(storedFiltered[i][1:],[kalman(sample, Q, R)[i]])
+            filtered[i] +=  [np.dot(storedFiltered[i][-avDim:], weights)]
 
             if calibrationFlag and counter > time_window and i==0:
+                #print(np.std(array[i]))
+                if np.std(array[i]) <   0.0055 :
+                    gravityVector[i] = np.average(array[i])
+                    
 
-                if abs(filtered[i][k])  >   0.5:
+                if abs(filtered[i][k])  >  0.5:
                     if Inside:
                         crossCount+=1
                     Inside = False
@@ -211,7 +215,7 @@ def move(read):
     while True:
         dash_size = int(os.read(read, 3).decode("utf-8").replace(" ", ""))
         #print(dash_size)
-        pyautogui.dragRel(generalStroke*dash_size, 0)
+        #pyautogui.dragRel(generalStroke*dash_size, 0)
 
 
 
