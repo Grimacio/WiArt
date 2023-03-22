@@ -35,13 +35,12 @@ avDim           =   50      #   Amount of samples used for averaging
 storedFiltered  =   [np.zeros(2000)]+[np.zeros(2000)]+[np.zeros(2000)]       #   Acceleration (x,y,z) values stored for averaging
 weights         =   np.linspace(1,10, num=avDim)    #   Averaging weights for each element stored
 weights         =   weights/np.linalg.norm(weights)     #   Normalize to avoid scaling
-threshold       =   70      #   Instantaneous velocity threshold for stroke dash detection
+threshold       =   0.25      #   Instantaneous velocity threshold for stroke dash detection
 time_window     =   100     #   Amount of samples used to derive intantaneous velocity
 counter         =   0       #   Sample counter
 dashSize        =   0       #   Relative size of each stroke
-Pos             =   False
-Inside          =   False
 crossCount      =   0
+Inside          =   True
 
 
 
@@ -147,7 +146,7 @@ def kalman(sample, Q, R):
 
 def extract(array, Q, R, write):
 
-    global lastFiltered, storedFiltered, avDim, weights, fs, calibrationSequence, threshold, time_window, counter, Inside, crossCount, dashSize
+    global lastFiltered, storedFiltered, avDim, weights, fs, calibrationSequence, threshold, time_window, counter, crossCount, Inside
 
     filtered    =   [ [] , [] , [] ]
     integral    =   [ 0 , 0 , 0 ]
@@ -166,41 +165,33 @@ def extract(array, Q, R, write):
             filtered[i] +=  [np.dot(storedFiltered[i][-avDim:], weights)]
 
             if calibrationFlag and counter > time_window and i==0:
-                #print(np.std(array[i]))
-                if np.std(array[i]) <   0.0055 :
+    
+                if np.std(array[i]) <   0.005 :
                     gravityVector[i] = np.average(array[i])
-                    
-
-                if abs(filtered[i][k])  >  0.5:
+                
+            
+                if abs(filtered[i][k])  >  0.3 :
                     if Inside:
-                        crossCount+=1
-                    Inside = False
-                    if crossCount==1:
-                        integral[i] = np.sum(filtered[i][-1*time_window:])
-                        
-                        if abs(dashSize) < abs(integral[i]//threshold):
-                            
-                            dashSize = integral[i]//threshold
+                        crossCount += 1
+                        Inside  =   False
+                    if crossCount<=1:
+                        integral[i] += filtered[i][k]
+                    
                 
                 else:
-                    if crossCount == 2:
+                    if not Inside:
+                        if crossCount >=2:
+                            print(integral[i])
+                            message =  str(int(integral[i]//threshold))+","+str(i)
+                            while len(message.encode("utf-8")) < 6:
+                                message+= " "
 
-                        message =  str(int(dashSize))
-
-                        while len(message.encode("utf-8")) < 3:
-                            message+= " "
-
-                        os.write(write, message.encode("utf-8"))
-                        dashSize=0
-                        crossCount = 0
+                            os.write(write, message.encode("utf-8"))
+                            crossCount = 0 
+                            integral[i] = 0
+                        Inside=True
                     
-                    Inside = True
-                
-                
-                    
-                    
-                    
-                    
+                              
         
     for i in range(3):
         
@@ -213,8 +204,8 @@ def extract(array, Q, R, write):
 def move(read):
     generalStroke = 100
     while True:
-        dash_size = int(os.read(read, 3).decode("utf-8").replace(" ", ""))
-        #print(dash_size)
+        dash_size , direction = os.read(read, 6).decode("utf-8").replace(" ", "").split(",")
+        #print(int(dash_size))
         #pyautogui.dragRel(generalStroke*dash_size, 0)
 
 
