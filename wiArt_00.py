@@ -30,9 +30,10 @@ lastXhatminus   =   [ 0 , 0 , 0 ]
 lastP           =   [ 1000 , 1000 , 1000 ]
 lastPminus      =   [ 0 , 0 , 0 ]
 lastK           =   [ 0 , 0 , 0 ]
-lastFiltered    =   [ 0 , 0 , 0 ]
 avDim           =   50      #   Amount of samples used for averaging
+rawBuffer       =   [ [ 0 ] , [ 0 ] , [ 0 ] ]
 storedFiltered  =   [np.zeros(2000)]+[np.zeros(2000)]+[np.zeros(2000)]       #   Acceleration (x,y,z) values stored for averaging
+storedRaw       =   [np.zeros(2000)]+[np.zeros(2000)]+[np.zeros(2000)]
 weights         =   np.linspace(1,10, num=avDim)    #   Averaging weights for each element stored
 weights         =   weights/np.linalg.norm(weights)     #   Normalize to avoid scaling
 threshold       =   0.25      #   Instantaneous velocity threshold for stroke dash detection
@@ -144,38 +145,45 @@ def kalman(sample, Q, R):
     return xhat
 
 
-def extract(array, Q, R, write):
+def extract(Q, R, write):
+    global storedFiltered, rawBuffer, avDim, weights, fs, calibrationSequence, threshold, time_window, counter, crossCount, Inside
 
-    global lastFiltered, storedFiltered, avDim, weights, fs, calibrationSequence, threshold, time_window, counter, crossCount, Inside
-
-    filtered    =   [ [] , [] , [] ]
+    filtered    =   [ 0 , 0 , 0 ]
     integral    =   [ 0 , 0 , 0 ]
+    
+    
 
-    for k in range(len(array[0])):
+    while True:
+        while len(rawBuffer[0])<1 or len(rawBuffer[1])<1 or len(rawBuffer[2])<1:
+            1
         counter+=1
-        sample  =   [array[0][k]]+[array[1][k]]+[array[2][k]]
+        sample  =   [rawBuffer[0][0]]+[rawBuffer[1][0]]+[rawBuffer[2][0]]
+
         calibrate(sample)
-
+        
         for l in range(3):
+            rawBuffer[l]=rawBuffer[l][1:]
             sample[l]-=gravityVector[l]
-
+            storedRaw[l]= np.append(storedRaw[l][1:], [sample[l]])
+        
         for i in range(len(filtered)):
 
             storedFiltered[i]   =   np.append(storedFiltered[i][1:],[kalman(sample, Q, R)[i]])
-            filtered[i] +=  [np.dot(storedFiltered[i][-avDim:], weights)]
+            filtered[i] =  np.dot(storedFiltered[i][-avDim:], weights)
 
             if calibrationFlag and counter > time_window and i==0:
+                #print("calibrated", counter)
     
-                if np.std(array[i]) <   0.005 :
-                    gravityVector[i] = np.average(array[i])
+                if np.std(storedRaw[i][-1000:]) <   0.005 :
+                    gravityVector[i] = np.average(storedRaw[i][-1000:])
                 
             
-                if abs(filtered[i][k])  >  0.3 :
+                if abs(filtered[i])  >  0.3 :
                     if Inside:
                         crossCount += 1
                         Inside  =   False
                     if crossCount<=1:
-                        integral[i] += filtered[i][k]
+                        integral[i] += filtered[i]
                     
                 
                 else:
@@ -189,15 +197,11 @@ def extract(array, Q, R, write):
                             os.write(write, message.encode("utf-8"))
                             crossCount = 0 
                             integral[i] = 0
-                        Inside=True
+                            
+                            
+                    Inside= True
                     
-                              
-        
-    for i in range(3):
-        
-        lastFiltered[i] = filtered[i][-1]
 
-    return filtered
     
 
 
@@ -304,6 +308,8 @@ def main():
             mouseMover = Thread(target=move, args=(pipe_read,))
             mouseMover.start()
             n=-1
+            aquisitor= Thread(target=extract, args=(1e-4, 0.9, pipe_write))
+            aquisitor.start()
             while not stop_event.is_set() :
                 rawX=[]
                 rawY=[]
@@ -328,13 +334,16 @@ def main():
                     rawX= np.append(rawX, [(x-X_min)/(X_max-X_min)*2-1])
                     rawY= np.append(rawY, [(y-Y_min)/(Y_max-Y_min)*2-1])
                     rawZ= np.append(rawZ, [(z-Z_min)/(Z_max-Z_min)*2-1])
+                    raw=[rawX,rawY,rawZ]
+                for index in range(3):
+                    rawBuffer[index]=np.append(rawBuffer[index], raw[index])
+
                 
-                
-                output  =   extract([rawX]+[rawY]+[rawZ], 1e-4, 0.9, pipe_write)
+                """output  =   extract([rawX]+[rawY]+[rawZ], 1e-4, 0.9, pipe_write)
                 X_plotData  =   np.append(X_plotData[len(output[0]):], output[0])
                 Y_plotData  =   np.append(Y_plotData[len(output[1]):], output[1])
                 Z_plotData  =   np.append(Z_plotData[len(output[2]):], output[2])
-                line_x,line_y, line_z=tuple(live_plotter(axis,X_plotData,Y_plotData,Z_plotData,line_x, line_y, line_z))
+                line_x,line_y, line_z=tuple(live_plotter(axis,X_plotData,Y_plotData,Z_plotData,line_x, line_y, line_z))"""
                 
 
                     
