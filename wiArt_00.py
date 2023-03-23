@@ -39,9 +39,8 @@ weights         =   weights/np.linalg.norm(weights)     #   Normalize to avoid s
 threshold       =   50      #   Instantaneous velocity threshold for stroke dash detection
 time_window     =   100     #   Amount of samples used to derive intantaneous velocity
 counter         =   0       #   Sample counter
-dashSize        =   0       #   Relative size of each stroke
-crossCount      =   0
-Inside          =   True
+crossCount      =   [ 0 , 0 ]
+Inside          =   [True, True]
 
 
 
@@ -163,44 +162,48 @@ def extract(Q, R, write,read):
         
         for l in range(3):
             rawBuffer[l]=rawBuffer[l][1:]
-            sample[l]-=gravityVector[l]
             storedRaw[l]= np.append(storedRaw[l][1:], [sample[l]])
+            sample[l]-=gravityVector[l]
+            
         
         for i in range(len(filtered)):
 
             storedFiltered[i]   =   np.append(storedFiltered[i][1:],[kalman(sample, Q, R)[i]])
             filtered[i] =  np.dot(storedFiltered[i][-avDim:], weights)
-
-            if calibrationFlag and counter > time_window and i==0:
-                
-
-                if np.std(storedRaw[i][-1000:]) <   0.005 :
-                    gravityVector[i] = np.average(storedRaw[i][-1000:])
-                
-                
             
-                if abs(filtered[i])  >  0.3 :
-                    if Inside:
-                        crossCount += 1
-                        Inside  =   False
-                    if crossCount<=1:
+
+            if calibrationFlag and counter > time_window and i<=1:
+                
+
+                if np.std(storedRaw[i][-1000:]) <   0.05 :
+                    gravityVector[i] = np.average(storedRaw[i][:100])
+                    Inside[i] = True
+                    crossCount[i]=0
+                    integral[i]=0
+                
+                
+                if abs(filtered[i])  >  0.4 :
+                    
+                    if Inside[i]:
+                        crossCount[i] += 1
+                        Inside[i]  =   False
+                    if crossCount[i]<=1:
                         integral[i] += filtered[i]
                     
                 
                 else:
-                    if not Inside:
-                        if crossCount >=2:
-                            #print(integral[i])
+                    if not Inside[i]:
+                        if crossCount[i] >=2:
                             message =  str(int(integral[i]//threshold))+","+str(i)
-                            while len(message.encode("utf-8")) < 6:
+                            while len(message.encode("utf-8")) < 10:
                                 message+= " "
 
                             os.write(write, message.encode("utf-8"))
-                            crossCount = 0 
+                            crossCount[i] = 0 
                             integral[i] = 0
                             move(read)
                             
-                    Inside= True
+                    Inside[i] = True
 
         
                     
@@ -211,10 +214,13 @@ def extract(Q, R, write,read):
 def move(read):
     generalStroke = 100
     
-    dash_size , direction = os.read(read, 6).decode("utf-8").replace(" ", "").split(",")
-    print(int(dash_size))
-    #pyautogui.dragRel(generalStroke*dash_size, 0)
-
+    dash_size , direction = os.read(read, 10).decode("utf-8").replace(" ", "").split(",")
+    dash_size = int(dash_size)
+    direction = int(direction)
+    if direction == 0:
+        pyautogui.dragRel(generalStroke*dash_size, 0)
+    elif direction == 1:
+        pyautogui.dragRel(0,generalStroke*dash_size)
 
 
 
