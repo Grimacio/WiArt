@@ -31,12 +31,12 @@ lastP           =   [ 1000 , 1000 , 1000 ]
 lastPminus      =   [ 0 , 0 , 0 ]
 lastK           =   [ 0 , 0 , 0 ]
 avDim           =   50      #   Amount of samples used for averaging
-rawBuffer       =   [ [ 0 ] , [ 0 ] , [ 0 ] ]
+rawBuffer       =   [ [ ] , [ ] , [ ] ]
 storedFiltered  =   [np.zeros(2000)]+[np.zeros(2000)]+[np.zeros(2000)]       #   Acceleration (x,y,z) values stored for averaging
 storedRaw       =   [np.zeros(2000)]+[np.zeros(2000)]+[np.zeros(2000)]
 weights         =   np.linspace(1,10, num=avDim)    #   Averaging weights for each element stored
 weights         =   weights/np.linalg.norm(weights)     #   Normalize to avoid scaling
-threshold       =   0.25      #   Instantaneous velocity threshold for stroke dash detection
+threshold       =   50      #   Instantaneous velocity threshold for stroke dash detection
 time_window     =   100     #   Amount of samples used to derive intantaneous velocity
 counter         =   0       #   Sample counter
 dashSize        =   0       #   Relative size of each stroke
@@ -100,13 +100,15 @@ def live_plotter(x_vec,y1_data,y2_data,y3_data,line1, line2, line3,identifier='A
     return line1, line2, line3
 
 def calibrate(sample):
-    global calibrationSequence, gravityVector, calibrationFlag
+    global calibrationSequence, gravityVector, calibrationFlag, fs, counter
+    
     if not detectGravity.is_set():
         for i in range(3):
             calibrationSequence[i] += [sample[i]]
     elif not calibrationFlag:
         calibrationFlag =   True
         gravityVector   =   [ np.average( calibrationSequence[0][ int( 5 * fs / 3 ):] )] + [np.average( calibrationSequence[1][int(5*fs/3):] )] + [np.average( calibrationSequence[2][int(5*fs/3):] )]
+        print(gravityVector)
         sys.stdout.write("\nCALIBRATION FINISHED\n")
     else:
         return
@@ -114,10 +116,7 @@ def calibrate(sample):
 
 def kalman(sample, Q, R):
     
-    
-    correction_cooldown= Event()
-    correction_cooldown.set()
-    global lastXhat, lastXhatminus, lastP, lastPminus, lastK, gravityVector, calibrationFlag, calibrationSequence, raisedX, accThreshold
+    global lastXhat, lastXhatminus, lastP, lastPminus, lastK
     
 ##  Data            X   Y   Z
     xhat       =  [ 0 , 0 , 0 ]
@@ -145,20 +144,21 @@ def kalman(sample, Q, R):
     return xhat
 
 
-def extract(Q, R, write):
-    global storedFiltered, rawBuffer, avDim, weights, fs, calibrationSequence, threshold, time_window, counter, crossCount, Inside
+def extract(Q, R, write,read):
+    global detectGravity, calibrationFlag, storedFiltered, rawBuffer, avDim, weights, threshold, time_window, counter, crossCount, Inside
 
     filtered    =   [ 0 , 0 , 0 ]
     integral    =   [ 0 , 0 , 0 ]
     
+    if len(rawBuffer[0])<1 or len(rawBuffer[1])<1 or len(rawBuffer[2])<1:
+        run_scheduled_task(5, detectGravity)
     
-
     while True:
         while len(rawBuffer[0])<1 or len(rawBuffer[1])<1 or len(rawBuffer[2])<1:
             1
         counter+=1
         sample  =   [rawBuffer[0][0]]+[rawBuffer[1][0]]+[rawBuffer[2][0]]
-
+        
         calibrate(sample)
         
         for l in range(3):
@@ -172,10 +172,11 @@ def extract(Q, R, write):
             filtered[i] =  np.dot(storedFiltered[i][-avDim:], weights)
 
             if calibrationFlag and counter > time_window and i==0:
-                #print("calibrated", counter)
-    
+                
+
                 if np.std(storedRaw[i][-1000:]) <   0.005 :
                     gravityVector[i] = np.average(storedRaw[i][-1000:])
+                
                 
             
                 if abs(filtered[i])  >  0.3 :
@@ -189,7 +190,7 @@ def extract(Q, R, write):
                 else:
                     if not Inside:
                         if crossCount >=2:
-                            print(integral[i])
+                            #print(integral[i])
                             message =  str(int(integral[i]//threshold))+","+str(i)
                             while len(message.encode("utf-8")) < 6:
                                 message+= " "
@@ -197,9 +198,11 @@ def extract(Q, R, write):
                             os.write(write, message.encode("utf-8"))
                             crossCount = 0 
                             integral[i] = 0
-                            
+                            move(read)
                             
                     Inside= True
+
+        
                     
 
     
@@ -207,10 +210,10 @@ def extract(Q, R, write):
 
 def move(read):
     generalStroke = 100
-    while True:
-        dash_size , direction = os.read(read, 6).decode("utf-8").replace(" ", "").split(",")
-        #print(int(dash_size))
-        #pyautogui.dragRel(generalStroke*dash_size, 0)
+    
+    dash_size , direction = os.read(read, 6).decode("utf-8").replace(" ", "").split(",")
+    print(int(dash_size))
+    #pyautogui.dragRel(generalStroke*dash_size, 0)
 
 
 
@@ -218,7 +221,6 @@ def move(read):
 def main():
     arg_parser = ArgParser()
     args = arg_parser.args
-    global calibration_finished
     if args.version:
         sys.stdout.write("sense.py version {}\n".format(__version__))
         sys.exit(0)
@@ -303,12 +305,12 @@ def main():
 
             axis= range(sizeWindow+1)[1:]
 
-            run_scheduled_task(5, detectGravity)
+            
             pipe_read,pipe_write = os.pipe()
-            mouseMover = Thread(target=move, args=(pipe_read,))
-            mouseMover.start()
+            #mouseMover = Thread(target=move, args=(pipe_read,))
+            #mouseMover.start()
             n=-1
-            aquisitor= Thread(target=extract, args=(1e-4, 0.9, pipe_write))
+            aquisitor= Thread(target=extract, args=(1e-4, 0.9, pipe_write, pipe_read))
             aquisitor.start()
             while not stop_event.is_set() :
                 rawX=[]
@@ -348,7 +350,7 @@ def main():
 
                     
         except KeyboardInterrupt:
-            mouseMover.join()
+            #mouseMover.join()
             if args.duration and timer:
                 timer.cancel()
             pass
