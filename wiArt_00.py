@@ -189,19 +189,20 @@ def extract(Q, R, write,read):
                         Inside[i]  =   False
                     if crossCount[i]<=1:
                         integral[i] += filtered[i]
-                    
-                
-                else:
-                    if not Inside[i]:
-                        if crossCount[i] >=2:
+                        if integral[i]//threshold > 0:
                             message =  str(int(integral[i]//threshold))+","+str(i)
+                            integral[i] -= integral[i]//threshold
                             while len(message.encode("utf-8")) < 10:
                                 message+= " "
 
                             os.write(write, message.encode("utf-8"))
+                            move(read)   
+                
+                else:
+                    if not Inside[i]:
+                        if crossCount[i] >=2:
                             crossCount[i] = 0 
                             integral[i] = 0
-                            move(read)
                             
                     Inside[i] = True
 
